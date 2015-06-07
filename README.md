@@ -15,6 +15,7 @@ This README would normally document whatever steps are necessary to get your app
 * Dependencies
 
 geniePi
+
 * Database configuration
 * How to run tests
 * Deployment instructions
@@ -30,6 +31,8 @@ gcc vehicleMon.c adcpiv3.c -o vehicleMon -lgeniePi && ./vehicleMon
 ### Who do I talk to? ###
 
 * Repo owner or admin
+
 Daniel Robinson
 d7robin@gmail.com
+
 * Other community or team contact
