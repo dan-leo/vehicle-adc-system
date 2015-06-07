@@ -13,10 +13,12 @@ This README would normally document whatever steps are necessary to get your app
 * Summary of set up
 * Configuration
 * Dependencies
+
 geniePi
 * Database configuration
 * How to run tests
 * Deployment instructions
+
 gcc vehicleMon.c adcpiv3.c -o vehicleMon -lgeniePi && ./vehicleMon
 
 ### Contribution guidelines ###
