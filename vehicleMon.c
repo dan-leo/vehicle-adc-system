@@ -22,6 +22,9 @@
  ***********************************************************************
  */
 
+#define TRUE 1
+#define FALSE 0
+
 #include <stdio.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -47,11 +50,15 @@
 
 #include "adcpiv3.h"
 
+int current_form, previous_form;
+int errorCondition;
+
 float true_voltage[8];
 float modified_voltage[8];
 float gradient[8];
 float offset[8];
-int current_form, previous_form;
+
+double display = 0.0 ;
 
 enum op_form 
 {
@@ -80,6 +87,10 @@ enum win_button
 	BUT_GRAD = 2,
 	BUT_OFFS = 3,
 	BUT_KB_BACK = 8,
+	BUT_CH_1 = 9,
+	BUT_SAVE_1 = 11,
+	BUT_CH_2 = 12,
+	BUT_SAVE_2 = 13,
 	BUT_MAX = 18,
 	BUT_MIN = 17
 };
@@ -90,12 +101,22 @@ enum button_4D
 	BUT_4D_RESET = 12
 };
 
+enum keys
+{
+	KB_BACKSPACE = 176,
+	KB_SIGN_CHANGE = 107,
+	KB_SAVE = 13,
+	KB_DOT = 110
+};
+
 
 void updateDisplay (float val, int index);
 int setup(void);
 static void *adc_read_loop (void *data);
 void handleGenieEvent (struct genieReplyStruct *reply);
 void updateForm(int form);
+void updateNumpadDisplay (void);
+void processKey (int key);
 
 /*
  *********************************************************************************
@@ -232,10 +253,10 @@ static void *adc_read_loop (void *data)
 			true_voltage[j] = getadc(j + 1);
 			modified_voltage[j] = gradient[j] * true_voltage[j] + offset[j];
 
-			printf ("Channel: %d  = %2.4fV\n", j + 1, modified_voltage[j]);
+			// printf ("Channel: %d  = %2.4fV\n", j + 1, modified_voltage[j]);
 			updateDisplay(modified_voltage[j], j);
 		}
-		printf("\n");
+		// printf("\n");
   }
 
   return (void *)NULL ;
@@ -266,8 +287,10 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   {
   	case HOME:
   		puts("HOME");
-
-  		
+  		if (previous_form == NUMPAD)
+  		{
+  			processKey('c');
+  		}
   	break;
 
   	case CALIBRATE:
@@ -317,14 +340,30 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 
   	case NUMPAD:
   		puts("NUMPAD");
-  		printf("previous_form: %d\n", previous_form);
+  		// printf("previous_form: %d\n", previous_form);
   		if (reply->object == GENIE_OBJ_WINBUTTON)
   		{
   			if (reply->index == BUT_KB_BACK)
   			{
-  				genieWriteObj(GENIE_OBJ_FORM, CALIBRATE, 0);
-  				updateForm(CALIBRATE);
+  				processKey('c');
+  				if (previous_form == CALIBRATE)
+  				{
+  					genieWriteObj(GENIE_OBJ_FORM, CALIBRATE, 0);
+  					updateForm(CALIBRATE);
+  				}
+  				else if (previous_form == AUTO)
+  				{
+  					genieWriteObj(GENIE_OBJ_FORM, AUTO, 0);
+  					updateForm(AUTO);	
+  				}
   			}
+  		}
+  		else if (reply->object == GENIE_OBJ_KEYBOARD)
+  		{
+  			if (reply->index == 0)  // Only one keyboard
+      			processKey(reply->data) ;
+    		else
+      			printf ("Unknown keyboard: %d\n", reply->index) ;
   		}
   	break;
 
@@ -334,13 +373,19 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   		{
   			switch (reply->index)
   			{
-  				case BUT_GRAD:
+  				case BUT_CH_1:
   					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
   					updateForm(NUMPAD);
   				break;
-  				case BUT_OFFS:
+  				case BUT_CH_2:
   					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
   					updateForm(NUMPAD);
+  				break;
+  				case BUT_SAVE_1:
+  					puts("SAVE_1");
+  				break;
+  				case BUT_SAVE_2:
+  					puts("SAVE_2");
   				break;
   			}
   		}
@@ -348,27 +393,11 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 
   	case CONFIRMATION:
   		puts("CONFIRMATION");
+
   	break;
   }
   
   /*
-  if (reply->object == GENIE_OBJ_KEYBOARD)
-  {
-    if (reply->index == 0)  // Only one keyboard
-      // calculatorKey (reply->data) ;
-    	printf("");
-    else
-      printf ("Unknown keyboard: %d\n", reply->index) ;
-  }
-  else if (reply->object == GENIE_OBJ_WINBUTTON)
-  {
-    if (reply->index == 1) // Clock button on main display
-      genieWriteObj (GENIE_OBJ_FORM, 1, 0) ;
-    else if (reply->index == 0) // Calculator button on clock display
-    {
-      genieWriteObj (GENIE_OBJ_FORM, 0, 0) ;
-      // updateDisplay () ;
-    }
     else
       printf ("Unknown button: %d\n", reply->index) ;
   }
@@ -382,4 +411,130 @@ void updateForm(int form)
 {
   	previous_form = current_form;
  	current_form = form;
+}
+
+/*
+ *  processKey:
+ *  A key has been pressed on the keyboard.
+ *********************************************************************************
+ */
+
+void processKey (int key)
+{
+  static int gotDecimal     = FALSE ;
+  static int startNewNumber = TRUE ;
+  static int first_back_space = TRUE;
+  static double multiplier  = 1.0 ;
+  float digit ;
+
+  if (isdigit (key))
+  {
+  	first_back_space = TRUE;
+    if (startNewNumber)
+    {
+      startNewNumber = FALSE ;
+      multiplier     = 1.0 ;
+      display        = 0.0 ;
+    }
+    digit = (double)(key - '0') ;
+    if (multiplier == 1.0)
+      display = display * 10 + (double)digit ;
+    else
+    {
+      display     = display + (multiplier * digit) ;
+      multiplier /= 10.0 ;
+    }
+    updateNumpadDisplay () ;
+    return ;
+  }
+
+  switch (key)
+  {
+
+  case 'c':     // Clear entry or operator
+      display        = 0.0 ;
+      gotDecimal     = FALSE ;
+      startNewNumber = TRUE ;
+      first_back_space = TRUE ;
+      multiplier = 1.0;
+    break ;
+
+// Other functions
+
+  case KB_SIGN_CHANGE:   // +/-
+    display = -display ;
+    break ;
+
+// Operators
+
+  case KB_DOT:
+    if (!gotDecimal)
+    {
+      if (startNewNumber)
+      {
+        startNewNumber = FALSE ;
+        display        = 0.0 ;
+      }
+      multiplier = 0.1 ;
+      gotDecimal = TRUE ;
+    }
+    break ;
+
+  case KB_BACKSPACE:
+    
+  	printf("multiplier: %-20lf\n", multiplier);
+  	if (multiplier >= 1)
+  	{
+  	  multiplier = 1.0;
+  	  puts("placeholder");
+      display = (int)(display / 10);
+  	}
+    else
+    {
+	  if (first_back_space) multiplier *= 10.0;
+	  first_back_space = FALSE;
+
+      printf("%lf\n", (display/multiplier)/10);
+      display     = (int)((display/multiplier)/10);
+      if (multiplier < 1) multiplier *= 10.0;
+      display    *= multiplier;
+    }
+
+    if (multiplier >= 1)
+    {
+    	gotDecimal = FALSE;
+    }
+    updateNumpadDisplay () ;
+  	break;
+
+  case KB_SAVE:
+  	break;
+
+  default:
+    printf ("*** Unknown key from display: 0x%02X, %d\n", key, key) ;
+    break ;
+  }
+
+  updateNumpadDisplay () ;
+}
+
+/*
+ * updateNumpadDisplay:
+ *  Do just that.
+ *********************************************************************************
+ */
+
+void updateNumpadDisplay (void)
+{
+  char buf [32] ;
+
+  if (errorCondition)
+    sprintf (buf, "%s", "ERROR") ;
+  else
+  {
+    sprintf (buf, "%13.13g", display) ;
+    printf ("%s\n", buf) ;
+  }
+
+  genieWriteStr (17, buf) ;  // Text box number 0
 }
