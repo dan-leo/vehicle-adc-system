@@ -24,6 +24,8 @@
 
 #define TRUE 1
 #define FALSE 0
+#define display_length 16
+#define channels 8
 
 #include <stdio.h>
 #include <fcntl.h>
@@ -50,15 +52,26 @@
 
 #include "adcpiv3.h"
 
+
 int current_form, previous_form;
 int errorCondition;
+int slider_values[channels];
+int current_slider = -1;
+int last_edit_button;
 
-float true_voltage[8];
-float modified_voltage[8];
-float gradient[8];
-float offset[8];
+double true_voltage[channels];
+double modified_voltage[channels];
+double gradient[channels];
+double offset[channels];
+double max[channels];
+double min[channels];
+double ref_volt_1[channels] = {0};
+double ref_volt_2[channels] = { [0 ... (channels - 1)] = 12};
+double true_volt_1[channels];
+double true_volt_2[channels];
 
-double display = 0.0 ;
+char display[display_length];
+char numberString[display_length];
 
 enum op_form 
 {
@@ -82,10 +95,14 @@ enum op_channel
 	CH_8 = 0
 };
 
+int slider[channels] = {CH_1, CH_2, CH_3, CH_4 , CH_5 , CH_6 , CH_7 , CH_8};
+
 enum win_button
 {
 	BUT_GRAD = 2,
 	BUT_OFFS = 3,
+	BUT_YES = 5,
+	BUT_NO = 6,
 	BUT_KB_BACK = 8,
 	BUT_CH_1 = 9,
 	BUT_SAVE_1 = 11,
@@ -110,13 +127,17 @@ enum keys
 };
 
 
-void updateDisplay (float val, int index);
+void updateDisplay (double val, int index);
 int setup(void);
 static void *adc_read_loop (void *data);
 void handleGenieEvent (struct genieReplyStruct *reply);
 void updateForm(int form);
 void updateNumpadDisplay (void);
+void updateGraphFormula (void);
+void updateAutoScreen (void);
 void processKey (int key);
+int isNumeric(char *str);
+void reset(void);
 
 /*
  *********************************************************************************
@@ -157,38 +178,6 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
-/*
- * updateDisplay:
- *  Do just that.
- *********************************************************************************
- */
- 
-void updateDisplay (float val, int index)
-{
-
-
-	char buf [32];
-	/*if (errorCondition)
-	  sprintf (buf, "%s", "ERROR") ;
-	else
-	{
-	  sprintf (buf, "%11.9g", display) ;
-	  printf ("%s\n", buf) ;
-	}*/
-
-	/*sprintf (buf, "%c %c",
-	         memory != 0.0 ? 'M' : ' ',
-	         lastOperator == 0 ? ' ' : lastOperator) ;
-
-	genieWriteStr (1, buf) ;  // Text box number 1*/
-
-	sprintf(buf, "%f", val);
-	genieWriteStr(index, buf);
-
-	genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(val*25 + 50));
-
-}
-
 int setup(void)
 {
 	int i;
@@ -212,12 +201,11 @@ int setup(void)
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_7, 0);
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_8, 0);
 
+	/*memset(ref_volt_1, 0, channels);
+	memset(ref_volt_2, 12, channels);*/
+
 	// init
-	for (i = 0; i < 8; i++)
-	{
-		gradient[i] = 1;
-		offset[i] = 0;
-	}
+	reset();
 	return 0;
 }
 
@@ -270,6 +258,9 @@ static void *adc_read_loop (void *data)
 
 void handleGenieEvent (struct genieReplyStruct *reply)
 {
+  int i = 0;
+  int slider_exists = FALSE;
+
   if (reply->cmd != GENIE_REPORT_EVENT)
   {
     printf ("Invalid event from the display: 0x%02X\r\n", reply->cmd) ;
@@ -303,10 +294,12 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   				case BUT_GRAD:
   					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
   					updateForm(NUMPAD);
+  					last_edit_button = BUT_GRAD;
   				break;
   				case BUT_OFFS:
   					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
   					updateForm(NUMPAD);
+  					last_edit_button = BUT_OFFS;
   				break;
 /*  				case BUT_AUTO:
   					genieWriteObj (GENIE_OBJ_FORM, AUTO, 0) ;
@@ -319,10 +312,12 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   				case BUT_MAX:
   					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
   					updateForm(NUMPAD);
+  					last_edit_button = BUT_MAX;
   				break;
   				case BUT_MIN:
   					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
   					updateForm(NUMPAD);
+  					last_edit_button = BUT_MIN;
   				break;
   			}
   		}
@@ -335,7 +330,43 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   					updateForm(CONFIRMATION);
   				break;
   			}
+
+  			for (i = 0; i < channels; i++)
+  			{
+  				if (reply->index == slider[i])
+  				{
+  					slider_exists = TRUE;
+  					current_slider = i;
+  					break;
+  				}
+  			}
+
+  			if (slider_exists)
+  			{
+  				if (reply->data == 1)
+  				{
+  					slider_values[current_slider] = 1;
+  				}
+  				else
+  				{
+  					slider_values[current_slider] = 0;	
+  					current_slider = -1;
+  				}
+  			}
   		}
+
+  		/*for (i = 0; i < channels; i++)
+  		{
+			printf("%d: %d\n", i, slider_values[i]);
+			if (slider_values[i])
+			{
+
+			}
+		}
+		printf("%d\n", current_slider);*/
+
+  		updateGraphFormula();
+
   	break;
 
   	case NUMPAD:
@@ -350,11 +381,13 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   				{
   					genieWriteObj(GENIE_OBJ_FORM, CALIBRATE, 0);
   					updateForm(CALIBRATE);
+  					updateGraphFormula();
   				}
   				else if (previous_form == AUTO)
   				{
   					genieWriteObj(GENIE_OBJ_FORM, AUTO, 0);
   					updateForm(AUTO);	
+  					updateAutoScreen();
   				}
   			}
   		}
@@ -369,6 +402,9 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 
   	case AUTO:
   		puts("AUTO");
+
+  		updateAutoScreen();
+
   		if (reply->object == GENIE_OBJ_WINBUTTON)
   		{
   			switch (reply->index)
@@ -376,16 +412,37 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   				case BUT_CH_1:
   					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
   					updateForm(NUMPAD);
+  					last_edit_button = BUT_CH_1;
   				break;
   				case BUT_CH_2:
   					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
   					updateForm(NUMPAD);
+  					last_edit_button = BUT_CH_2;
   				break;
   				case BUT_SAVE_1:
   					puts("SAVE_1");
+  					for (i = 0; i < channels; i++)
+  					{
+  						if (slider_values[i])
+  						{
+	  						true_volt_1[i] = true_voltage[i];
+	  						gradient[i] = (ref_volt_1[i] - ref_volt_2[i]) / (true_volt_1[i] - true_volt_2[i]);
+	  						offset[i] = ref_volt_1[i] - gradient[i] * true_volt_1[i];
+	  					}
+  					}
+
   				break;
   				case BUT_SAVE_2:
   					puts("SAVE_2");
+  					for (i = 0; i < channels; i++)
+  					{
+  						if (slider_values[i])
+  						{
+	  						true_volt_2[i] = true_voltage[i];
+	  						gradient[i] = (ref_volt_2[i] - ref_volt_1[i]) / (true_volt_2[i] - true_volt_1[i]);
+	  						offset[i] = ref_volt_2[i] - gradient[i] * true_volt_2[i];
+	  					}
+  					}
   				break;
   			}
   		}
@@ -393,6 +450,22 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 
   	case CONFIRMATION:
   		puts("CONFIRMATION");
+  		if (reply->object == GENIE_OBJ_WINBUTTON)
+  		{
+  			if (reply->index == BUT_YES)
+  			{
+  				reset();
+  				genieWriteObj(GENIE_OBJ_FORM, CALIBRATE, 0);
+  				updateForm(CALIBRATE);
+  				updateNumpadDisplay();
+  			}
+  			else if (reply->index == BUT_NO)
+  			{
+  				genieWriteObj(GENIE_OBJ_FORM, CALIBRATE, 0);
+  				updateForm(CALIBRATE);
+  				updateNumpadDisplay();
+  			}
+  		}
 
   	break;
   }
@@ -421,29 +494,18 @@ void updateForm(int form)
 
 void processKey (int key)
 {
-  static int gotDecimal     = FALSE ;
-  static int startNewNumber = TRUE ;
-  static int first_back_space = TRUE;
-  static double multiplier  = 1.0 ;
-  float digit ;
+  static int minus = FALSE;
+  int i;
+
+  double numberDouble;
+
+  char hyphen[display_length];
 
   if (isdigit (key))
   {
-  	first_back_space = TRUE;
-    if (startNewNumber)
-    {
-      startNewNumber = FALSE ;
-      multiplier     = 1.0 ;
-      display        = 0.0 ;
-    }
-    digit = (double)(key - '0') ;
-    if (multiplier == 1.0)
-      display = display * 10 + (double)digit ;
-    else
-    {
-      display     = display + (multiplier * digit) ;
-      multiplier /= 10.0 ;
-    }
+    sprintf(numberString, "%s%c", numberString, key);
+    printf("numberString: %s\n", numberString);
+    
     updateNumpadDisplay () ;
     return ;
   }
@@ -451,63 +513,114 @@ void processKey (int key)
   switch (key)
   {
 
-  case 'c':     // Clear entry or operator
-      display        = 0.0 ;
-      gotDecimal     = FALSE ;
-      startNewNumber = TRUE ;
-      first_back_space = TRUE ;
-      multiplier = 1.0;
+  case 'c':     // Clear entry
+  	  memset(numberString, 0, display_length);
+  	  minus = FALSE;
     break ;
 
-// Other functions
+  // Other functions
 
   case KB_SIGN_CHANGE:   // +/-
-    display = -display ;
+  	if (!minus)
+  	{
+    	hyphen[0] = '-';
+    	hyphen[1] = '\0';
+    	strcat(hyphen, numberString);
+    	strcpy(numberString, hyphen);
+    	minus = TRUE;
+    }
+    else
+    {
+    	strcpy(numberString, numberString + 1);
+    	minus = FALSE;
+    }
     break ;
 
-// Operators
+  // Operators
 
   case KB_DOT:
-    if (!gotDecimal)
-    {
-      if (startNewNumber)
-      {
-        startNewNumber = FALSE ;
-        display        = 0.0 ;
-      }
-      multiplier = 0.1 ;
-      gotDecimal = TRUE ;
-    }
+  	sprintf(numberString, "%s%c", numberString, '.');
     break ;
 
   case KB_BACKSPACE:
     
-  	printf("multiplier: %-20lf\n", multiplier);
-  	if (multiplier >= 1)
+  	numberString[strlen(numberString)-1] = '\0';
+  	if (strlen(numberString) < 1)
   	{
-  	  multiplier = 1.0;
-  	  puts("placeholder");
-      display = (int)(display / 10);
+  		minus = FALSE;
   	}
-    else
-    {
-	  if (first_back_space) multiplier *= 10.0;
-	  first_back_space = FALSE;
-
-      printf("%lf\n", (display/multiplier)/10);
-      display     = (int)((display/multiplier)/10);
-      if (multiplier < 1) multiplier *= 10.0;
-      display    *= multiplier;
-    }
-
-    if (multiplier >= 1)
-    {
-    	gotDecimal = FALSE;
-    }
-    updateNumpadDisplay () ;
+    // updateNumpadDisplay () ;
   	break;
 
   case KB_SAVE:
+    if (isNumeric(numberString))
+    {
+    	numberDouble = atof(numberString);
+    	sprintf(numberString, "%lf", numberDouble);
+    	switch (last_edit_button)
+    	{
+    		case BUT_GRAD:
+    			for (i = 0; i < channels; i++)
+    			{
+    				if (slider_values[i])
+    				{
+    					gradient[i] = numberDouble;
+    				}
+    			}
+    		break;
+    		case BUT_OFFS:
+    			for (i = 0; i < channels; i++)
+    			{
+    				if (slider_values[i])
+    				{
+    					offset[i] = numberDouble;
+    				}
+    			}
+    		break;
+    		case BUT_MAX:
+    			for (i = 0; i < channels; i++)
+    			{
+    				if (slider_values[i])
+    				{
+    					max[i] = numberDouble;
+    				}
+    			}
+    		break;
+    		case BUT_MIN:
+    			for (i = 0; i < channels; i++)
+    			{
+    				if (slider_values[i])
+    				{
+    					min[i] = numberDouble;
+    				}
+    			}
+    		break;
+    		case BUT_CH_1:
+    			for (i = 0; i < channels; i++)
+    			{
+    				if (slider_values[i])
+    				{
+    					ref_volt_1[i] = numberDouble;
+    				}
+    			}
+    		break;
+    		case BUT_CH_2:
+    			for (i = 0; i < channels; i++)
+    			{
+    				if (slider_values[i])
+    				{
+    					ref_volt_2[i] = numberDouble;
+    				}
+    			}
+    		break;
+    	}
+
+    }
+    else
+    {
+    	// todo: make so that any key removes error
+    	sprintf(numberString, "ERROR");
+    }
   	break;
 
   default:
@@ -516,6 +629,38 @@ void processKey (int key)
   }
 
   updateNumpadDisplay () ;
+  printf("numberString: %s\n", numberString);
+}
+
+
+/*
+ * updateDisplay:
+ *  Do just that.
+ *********************************************************************************
+ */
+ 
+void updateDisplay (double val, int index)
+{
+	char buf [32];
+	/*if (errorCondition)
+	  sprintf (buf, "%s", "ERROR") ;
+	else
+	{
+	  sprintf (buf, "%11.9g", display) ;
+	  printf ("%s\n", buf) ;
+	}*/
+
+	/*sprintf (buf, "%c %c",
+	         memory != 0.0 ? 'M' : ' ',
+	         lastOperator == 0 ? ' ' : lastOperator) ;
+
+	genieWriteStr (1, buf) ;  // Text box number 1*/
+
+	sprintf(buf, "%.10lf", val);
+	genieWriteStr(index, buf);
+
+	genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(val*25 + 50));
+
 }
 
 /*
@@ -532,9 +677,124 @@ void updateNumpadDisplay (void)
     sprintf (buf, "%s", "ERROR") ;
   else
   {
-    sprintf (buf, "%13.13g", display) ;
-    printf ("%s\n", buf) ;
+    // sprintf (buf, "%13.13g", display) ;
+    strcpy(buf, numberString);
+    // printf ("%s\n", buf) ;
   }
 
-  genieWriteStr (17, buf) ;  // Text box number 0
+  genieWriteStr (17, buf) ;  // Text box number 17
+}
+
+/*
+ * updateGraphFormula:
+ *  Do just that.
+ *********************************************************************************
+ */
+
+void updateGraphFormula (void)
+{
+  char buf [32] ;
+
+  if (errorCondition)
+    sprintf (buf, "%s", "ERROR") ;
+  else
+  {
+  	if (current_slider == -1)
+  	{
+		strcpy(buf, "        y = m * x + c");
+  	}
+  	else
+  	{
+    	sprintf (buf, "y = %6.4lfx + %5.3lf", gradient[current_slider], offset[current_slider]);
+    	// printf ("%s\n", buf) ;
+    }
+  }
+
+  genieWriteStr (16, buf) ;  // Text box number 16
+}
+
+
+/*
+ * updateAutoScreen:
+ *  Do just that.
+ *********************************************************************************
+ */
+
+void updateAutoScreen (void)
+{
+  char buf_1 [32] ;
+  char buf_2 [32] ;
+
+  if (errorCondition)
+  {
+    sprintf (buf_1, "%s", "ERROR") ;
+	sprintf (buf_2, "%s", "ERROR") ;
+  }
+  else
+  {
+  	if (current_slider == -1)
+  	{
+		strcpy(buf_1, "             0 V");
+		strcpy(buf_2, "             12 V");
+  	}
+  	else
+  	{
+    	sprintf (buf_1, "%lf V", ref_volt_1[current_slider]);
+    	sprintf (buf_2, "%lf V", ref_volt_2[current_slider]);
+    	// printf ("%s\n", buf) ;
+    }
+  }
+
+  genieWriteStr (19, buf_1) ;  // Text box number 19
+  genieWriteStr (20, buf_2) ;  // Text box number 20
+}
+
+int isNumeric(char *str)
+{
+	int dot = 0;
+	int minus = 0;
+
+	while(*str)
+	{
+		if (*str == '\0')
+		{
+			return 0;
+		}
+		else if (*str == '.')
+		{
+			dot++;
+			if (dot > 1)
+			{
+				return 0;
+			}
+		}
+		else if (*str == '-')
+		{
+			minus++;
+			if (minus > 1)
+			{
+				return 0;
+			}
+		}
+		else if (!isdigit(*str))
+		{
+			return 0;
+		}
+		str++;
+	}
+	return 1;
+}
+
+void reset(void)
+{
+	int i;
+	for (i = 0; i < 8; i++)
+	{
+		gradient[i] = 1;
+		offset[i] = 0;
+		max[i] = 2;
+		min[i] = -2;
+		ref_volt_1[i] = 0;
+		ref_volt_2[i] = 12;
+	}
 }
