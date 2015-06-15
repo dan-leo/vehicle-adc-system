@@ -339,8 +339,8 @@ static void *adc_read_loop (void *data)
 
 			// printf ("Channel: %d  = %2.4fV\n", j + 1, modified_voltage[j]);
 			
-			// updateDisplay(modified_voltage[j], j);
-			updateDisplay(true_voltage[j], j);
+			updateDisplay(modified_voltage[j], j);
+			genieWriteObj(GENIE_OBJ_SCOPE, j < 4 ? 0 : 1, (int)(true_voltage[j]*25 + 50));
 		}
 		// printf("\n");
   }
@@ -760,7 +760,7 @@ void updateDisplay (double val, int index)
 	sprintf(buf, "%.10lf", val);
 	genieWriteStr(index, buf);
 
-	genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(val*25 + 50));
+	// genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(val*25 + 50));
 
 }
 
