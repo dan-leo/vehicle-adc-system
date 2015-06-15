@@ -26,6 +26,7 @@
 #define FALSE 0
 #define display_length 16
 #define channels 8
+#define line_length 255
 
 #include <stdio.h>
 #include <fcntl.h>
@@ -72,6 +73,9 @@ double true_volt_2[channels];
 
 char display[display_length];
 char numberString[display_length];
+char *data_file = "data.txt";
+
+FILE *fp;
 
 enum op_form 
 {
@@ -138,6 +142,7 @@ void updateAutoScreen (void);
 void processKey (int key);
 int isNumeric(char *str);
 void reset(void);
+void save_to_file(void);
 
 /*
  *********************************************************************************
@@ -181,6 +186,10 @@ int main(int argc, char **argv) {
 int setup(void)
 {
 	int i;
+	char *line;
+	const char t[2] = ",";
+	char *token;
+
 	// Genie display setup
 	// Using the Raspberry Pi's on-board serial port.
 	if (genieSetup ("/dev/ttyAMA0", 115200) < 0)
@@ -201,11 +210,98 @@ int setup(void)
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_7, 0);
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_8, 0);
 
-	/*memset(ref_volt_1, 0, channels);
-	memset(ref_volt_2, 12, channels);*/
-
 	// init
-	reset();
+
+	fp = fopen(data_file, "r+");
+
+	line = calloc(line_length, sizeof(char));
+
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+	// printf("%s\n", line);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		gradient[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels) i++;
+	}
+
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		offset[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels) i++;
+	}
+
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		max[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels) i++;
+	}
+
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		min[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels) i++;
+	}
+
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		ref_volt_1[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels) i++;
+	}
+
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		ref_volt_2[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels) i++;
+	}
+
+
+	fclose(fp);
 	return 0;
 }
 
@@ -242,7 +338,9 @@ static void *adc_read_loop (void *data)
 			modified_voltage[j] = gradient[j] * true_voltage[j] + offset[j];
 
 			// printf ("Channel: %d  = %2.4fV\n", j + 1, modified_voltage[j]);
-			updateDisplay(modified_voltage[j], j);
+			
+			// updateDisplay(modified_voltage[j], j);
+			updateDisplay(true_voltage[j], j);
 		}
 		// printf("\n");
   }
@@ -430,6 +528,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 	  						offset[i] = ref_volt_1[i] - gradient[i] * true_volt_1[i];
 	  					}
   					}
+  					save_to_file();
 
   				break;
   				case BUT_SAVE_2:
@@ -443,6 +542,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 	  						offset[i] = ref_volt_2[i] - gradient[i] * true_volt_2[i];
 	  					}
   					}
+  					save_to_file();
   				break;
   			}
   		}
@@ -614,6 +714,7 @@ void processKey (int key)
     			}
     		break;
     	}
+    	save_to_file();
 
     }
     else
@@ -788,6 +889,7 @@ int isNumeric(char *str)
 void reset(void)
 {
 	int i;
+
 	for (i = 0; i < 8; i++)
 	{
 		gradient[i] = 1;
@@ -797,4 +899,57 @@ void reset(void)
 		ref_volt_1[i] = 0;
 		ref_volt_2[i] = 12;
 	}
+
+	save_to_file();
+}
+
+void save_to_file(void)
+{
+	int i;
+	char *line;
+	fp = fopen(data_file, "w");
+
+	fprintf(fp, "gradient:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", gradient[i]);
+	}
+
+	fprintf(fp, "\noffset:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", offset[i]);
+	}
+
+	fprintf(fp, "\nmax:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", max[i]);
+	}
+
+	fprintf(fp, "\nmin:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", min[i]);
+	}
+
+	fprintf(fp, "\nref_volt_1:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", ref_volt_1[i]);
+	}
+
+	fprintf(fp, "\nref_volt_2:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", ref_volt_2[i]);
+	}
+
+	fclose(fp);
 }
