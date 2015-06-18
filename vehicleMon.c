@@ -143,6 +143,7 @@ void processKey (int key);
 int isNumeric(char *str);
 void reset(void);
 void save_to_file(void);
+void updateRange(void);
 
 /*
  *********************************************************************************
@@ -227,7 +228,14 @@ int setup(void)
 	{
 		gradient[i] = atof(token);
 		token = strtok(NULL, t);
-		if (i < channels) i++;
+		if (i < channels - 1)
+    {
+      i++;
+    }
+    else
+    {
+      break;
+    }
 	}
 
 	line = malloc(line_length * sizeof(char));
@@ -241,7 +249,14 @@ int setup(void)
 	{
 		offset[i] = atof(token);
 		token = strtok(NULL, t);
-		if (i < channels) i++;
+		if (i < channels - 1)
+    {
+      i++;
+    }
+    else
+    {
+      break;
+    }
 	}
 
 	line = malloc(line_length * sizeof(char));
@@ -255,7 +270,14 @@ int setup(void)
 	{
 		max[i] = atof(token);
 		token = strtok(NULL, t);
-		if (i < channels) i++;
+		if (i < channels - 1)
+    {
+      i++;
+    }
+    else
+    {
+      break;
+    }
 	}
 
 	line = malloc(line_length * sizeof(char));
@@ -269,7 +291,14 @@ int setup(void)
 	{
 		min[i] = atof(token);
 		token = strtok(NULL, t);
-		if (i < channels) i++;
+		if (i < channels - 1)
+    {
+      i++;
+    }
+    else
+    {
+      break;
+    }
 	}
 
 	line = malloc(line_length * sizeof(char));
@@ -283,7 +312,14 @@ int setup(void)
 	{
 		ref_volt_1[i] = atof(token);
 		token = strtok(NULL, t);
-		if (i < channels) i++;
+		if (i < channels - 1)
+    {
+      i++;
+    }
+    else
+    {
+      break;
+    }
 	}
 
 	line = malloc(line_length * sizeof(char));
@@ -297,7 +333,14 @@ int setup(void)
 	{
 		ref_volt_2[i] = atof(token);
 		token = strtok(NULL, t);
-		if (i < channels) i++;
+		if (i < channels - 1)
+    {
+      i++;
+    }
+    else
+    {
+      break;
+    }
 	}
 
 
@@ -464,6 +507,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 		printf("%d\n", current_slider);*/
 
   		updateGraphFormula();
+      updateRange();
 
   	break;
 
@@ -480,6 +524,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   					genieWriteObj(GENIE_OBJ_FORM, CALIBRATE, 0);
   					updateForm(CALIBRATE);
   					updateGraphFormula();
+            updateRange();
   				}
   				else if (previous_form == AUTO)
   				{
@@ -800,18 +845,46 @@ void updateGraphFormula (void)
     sprintf (buf, "%s", "ERROR") ;
   else
   {
-  	if (current_slider == -1)
-  	{
-		strcpy(buf, "        y = m * x + c");
-  	}
-  	else
-  	{
-    	sprintf (buf, "y = %6.4lfx + %5.3lf", gradient[current_slider], offset[current_slider]);
-    	// printf ("%s\n", buf) ;
+    if (current_slider == -1)
+    {
+      strcpy(buf, "        y = m * x + c");
+    }
+    else
+    {
+      sprintf (buf, "y = %6.4lfx + %5.3lf", gradient[current_slider], offset[current_slider]);
+      // printf ("%s\n", buf) ;
     }
   }
 
   genieWriteStr (16, buf) ;  // Text box number 16
+}
+
+/*
+ * updateRange:
+ *  Do just that.
+ *********************************************************************************
+ */
+
+void updateRange (void)
+{
+  char buf [32] ;
+
+  if (errorCondition)
+    sprintf (buf, "%s", "ERROR") ;
+  else
+  {
+    if (current_slider == -1)
+    {
+      strcpy(buf, "Scope Range:\n[-2, 2] V");
+    }
+    else
+    {
+      sprintf (buf, "[%lf,\n %lf] V", min[current_slider], max[current_slider]);
+      // printf ("%s\n", buf) ;
+    }
+  }
+
+  genieWriteStr (21, buf) ;  // Text box number 16
 }
 
 
