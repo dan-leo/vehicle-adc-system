@@ -71,6 +71,9 @@ double ref_volt_2[channels] = { [0 ... (channels - 1)] = 12};
 double true_volt_1[channels];
 double true_volt_2[channels];
 
+const double max_volt = 2.048;
+const double min_volt = -2.048;
+
 char display[display_length];
 char numberString[display_length];
 char *data_file = "data.txt";
@@ -383,7 +386,7 @@ static void *adc_read_loop (void *data)
 			// printf ("Channel: %d  = %2.4fV\n", j + 1, modified_voltage[j]);
 			
 			updateDisplay(modified_voltage[j], j);
-			genieWriteObj(GENIE_OBJ_SCOPE, j < 4 ? 0 : 1, (int)(true_voltage[j]*25 + 50));
+			// genieWriteObj(GENIE_OBJ_SCOPE, j < 4 ? 0 : 1, (int)(true_voltage[j]*25 + 50));
 		}
 		// printf("\n");
   }
@@ -571,6 +574,8 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 	  						true_volt_1[i] = true_voltage[i];
 	  						gradient[i] = (ref_volt_1[i] - ref_volt_2[i]) / (true_volt_1[i] - true_volt_2[i]);
 	  						offset[i] = ref_volt_1[i] - gradient[i] * true_volt_1[i];
+                max[i] = gradient[i] * max_volt + offset[i];
+                min[i] = gradient[i] * min_volt + offset[i];
 	  					}
   					}
   					save_to_file();
@@ -585,6 +590,8 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 	  						true_volt_2[i] = true_voltage[i];
 	  						gradient[i] = (ref_volt_2[i] - ref_volt_1[i]) / (true_volt_2[i] - true_volt_1[i]);
 	  						offset[i] = ref_volt_2[i] - gradient[i] * true_volt_2[i];
+                max[i] = gradient[i] * max_volt + offset[i];
+                min[i] = gradient[i] * min_volt + offset[i];
 	  					}
   					}
   					save_to_file();
@@ -710,6 +717,8 @@ void processKey (int key)
     				if (slider_values[i])
     				{
     					gradient[i] = numberDouble;
+              max[i] = gradient[i] * max_volt + offset[i];
+              min[i] = gradient[i] * min_volt + offset[i];
     				}
     			}
     		break;
@@ -719,6 +728,8 @@ void processKey (int key)
     				if (slider_values[i])
     				{
     					offset[i] = numberDouble;
+              max[i] = gradient[i] * max_volt + offset[i];
+              min[i] = gradient[i] * min_volt + offset[i];
     				}
     			}
     		break;
@@ -788,6 +799,12 @@ void processKey (int key)
 void updateDisplay (double val, int index)
 {
 	char buf [32];
+
+  double difference;
+  double true_max;
+  double true_min;
+  double true_diff;
+
 	/*if (errorCondition)
 	  sprintf (buf, "%s", "ERROR") ;
 	else
@@ -802,10 +819,15 @@ void updateDisplay (double val, int index)
 
 	genieWriteStr (1, buf) ;  // Text box number 1*/
 
+  difference = max[index] - min[index];
+  true_max = (max[index] - offset[index]) / gradient[index];
+  true_min = (min[index] - offset[index]) / gradient[index];
+  true_diff = true_max - true_min;
+
 	sprintf(buf, "%.10lf", val);
 	genieWriteStr(index, buf);
 
-	// genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(val*25 + 50));
+	genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(((val - offset[index]) / (difference / 4))*25 + 50));
 
 }
 
@@ -867,7 +889,7 @@ void updateGraphFormula (void)
 
 void updateRange (void)
 {
-  char buf [32] ;
+  char buf [40] ;
 
   if (errorCondition)
     sprintf (buf, "%s", "ERROR") ;
@@ -967,8 +989,8 @@ void reset(void)
 	{
 		gradient[i] = 1;
 		offset[i] = 0;
-		max[i] = 2;
-		min[i] = -2;
+		max[i] = max_volt;
+		min[i] = min_volt;
 		ref_volt_1[i] = 0;
 		ref_volt_2[i] = 12;
 	}
