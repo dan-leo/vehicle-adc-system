@@ -800,34 +800,27 @@ void updateDisplay (double val, int index)
 {
 	char buf [32];
 
-  double difference;
-  double true_max;
-  double true_min;
-  double true_diff;
+  double output;
+  double graph_gradient;
+  double graph_offset;
 
-	/*if (errorCondition)
-	  sprintf (buf, "%s", "ERROR") ;
-	else
-	{
-	  sprintf (buf, "%11.9g", display) ;
-	  printf ("%s\n", buf) ;
-	}*/
-
-	/*sprintf (buf, "%c %c",
-	         memory != 0.0 ? 'M' : ' ',
-	         lastOperator == 0 ? ' ' : lastOperator) ;
-
-	genieWriteStr (1, buf) ;  // Text box number 1*/
-
-  difference = max[index] - min[index];
-  true_max = (max[index] - offset[index]) / gradient[index];
-  true_min = (min[index] - offset[index]) / gradient[index];
-  true_diff = true_max - true_min;
+  graph_gradient = 100 / (max[index] - min[index]);
+  graph_offset = 100 - graph_gradient * max[index];
+  output = graph_gradient * val + graph_offset;
 
 	sprintf(buf, "%.10lf", val);
 	genieWriteStr(index, buf);
 
-	genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(((val - offset[index]) / (difference / 4))*25 + 50));
+	genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(output));
+  // if (index == 0)
+  // { 
+  //   printf("%d: %lf  grad: %lf, offs: %lf\n", index, output, graph_gradient, graph_offset);
+  // }
+
+  // look at this:
+  // initial attempt at graph equation
+  // ((val - offset[index]) / (temp_diff / 4))*25 + 50 - (true_avg * 50)
+  // drawing on paper first makes life much easier
 
 }
 
