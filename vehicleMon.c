@@ -58,11 +58,11 @@ int current_form, previous_form;
 int errorCondition;
 int current_slider = -1;
 int last_edit_button;
-int alarm_activated = 0;
 
 int slider_values[channels];
 int rocker_values[channels];
 int armed[channels];
+int alarm_activated[channels];
 
 double true_voltage[channels];
 double modified_voltage[channels];
@@ -246,6 +246,7 @@ int setup(void)
 	{
 		alarm_max[i] = 5;
 		alarm_min[i] = -5;
+		alarm_activated[i] = 0;
 		genieWriteObj(GENIE_OBJ_USER_LED, i, 0);
 		genieWriteObj(GENIE_OBJ_4DBUTTON, rocker[i], 0);
 	}
@@ -424,7 +425,12 @@ static void *adc_read_loop (void *data)
 				{
 					if (armed[j])
 					{
-						alarm_activated = 1;
+						alarm_activated[j] = 1;
+						if (current_form != ALARM)
+						{
+							genieWriteObj(GENIE_OBJ_FORM, ALARM, 0);
+							updateForm(ALARM);
+						}
 					}
 				}
 			}
@@ -434,7 +440,12 @@ static void *adc_read_loop (void *data)
 				{
 					if (armed[j])
 					{
-						alarm_activated = 1;
+						alarm_activated[j] = 1;
+						if (current_form != ALARM)
+						{
+							genieWriteObj(GENIE_OBJ_FORM, ALARM, 0);
+							updateForm(ALARM);
+						}
 					} 
 				} 
 			}
@@ -753,6 +764,32 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 		  }
 		}*/
 		}
+		break;
+
+		case ALARM:
+			if (reply->object == GENIE_OBJ_WINBUTTON)
+			{
+				if (reply->index == BUT__ALARM)
+				{
+
+					for (i = 0; i < channels; i++)
+					{
+						if (alarm_activated[i])
+						{
+							armed[i] = 0;
+							alarm_activated[i] = 0;
+						}
+					}
+				}
+				else if (reply->index == BUT__ALARM_DISARM_ALL)
+				{
+					for (i = 0; i < channels; i++)
+					{
+						armed[i] = 0;
+						alarm_activated[i] = 0;
+					}
+				}
+			}
 		break;
 	}
 
@@ -1109,10 +1146,10 @@ void updateAlarm (void)
 		for (i = 0; i < channels; i++)
 		{
 			sprintf (buf, "%lf V", alarm_min[i]);
-			genieWriteStr (i + 33, buf);  
+			genieWriteStr (i + 33, buf);
 
 			sprintf (buf, "%lf V", alarm_max[i]);
-			genieWriteStr (i + 42, buf);  
+			genieWriteStr (i + 42, buf);
 		}
 
 	}
