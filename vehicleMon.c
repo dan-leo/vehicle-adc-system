@@ -214,6 +214,19 @@ int setup(void)
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_7, 0);
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_8, 0);
 
+  genieWriteStr(23, "1\n2\n3\n4\n5\n6\n7\n8");
+
+//   genieWriteStr(23, "Channel:             Min:                                                    Max:\r\n"
+// "1                       -5.0000 V                                          5.0000 V\r\n"
+// "2                       -5.0000 V                                          5.0000 V\n"
+// "3                       -5.0000 V                                          5.0000 V\n"
+// "4                       -5.0000 V                                          5.0000 V\n"
+// "5                       -5.0000 V                                          5.0000 V\n"
+// "6                       -5.0000 V                                          5.0000 V\n"
+// "7                       -5.0000 V                                          5.0000 V\n"
+// "8                       -5.0000 V                                          5.0000 V\n"
+// );
+
 	// init
 
 	fp = fopen(data_file, "r+");
@@ -386,6 +399,7 @@ static void *adc_read_loop (void *data)
 			// printf ("Channel: %d  = %2.4fV\n", j + 1, modified_voltage[j]);
 			
 			updateDisplay(modified_voltage[j], j);
+      // genieWriteObj(GENIE_OBJ_SOUND, 0, 0);
 			// genieWriteObj(GENIE_OBJ_SCOPE, j < 4 ? 0 : 1, (int)(true_voltage[j]*25 + 50));
 		}
 		// printf("\n");
@@ -937,6 +951,14 @@ void updateAutoScreen (void)
   genieWriteStr (19, buf_1) ;  // Text box number 19
   genieWriteStr (20, buf_2) ;  // Text box number 20
 }
+
+/*
+ * isNumeric:
+ *  Check if a number is numeric.
+ *
+ *  @return: 1 if true or 0 if false.
+ *********************************************************************************
+ */
 
 int isNumeric(char *str)
 {
