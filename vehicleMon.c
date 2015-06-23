@@ -54,7 +54,7 @@
 #include "adcpiv3.h"
 
 
-int current_form, previous_form;
+int current_form, previous_form, pre_previous_form;
 int errorCondition;
 int current_slider = -1;
 int last_edit_button;
@@ -471,6 +471,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 	int i = 0;
 	int slider_exists = FALSE;
 	int rocker_exists = FALSE;
+	int temp_form;
 
 	if (reply->cmd != GENIE_REPORT_EVENT)
 	{
@@ -607,6 +608,15 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 					genieWriteObj(GENIE_OBJ_FORM, SETUP_ALARM, 0);
 					updateForm(SETUP_ALARM);	
 					updateAlarm();
+				}
+				else if (previous_form == ALARM)
+				{
+					genieWriteObj(GENIE_OBJ_FORM, pre_previous_form, 0);
+					updateForm(pre_previous_form);	
+					updateAlarm();
+					updateAutoScreen();
+					updateGraphFormula();
+					updateRange();
 				}
 			}
 		}
@@ -771,13 +781,13 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 			{
 				if (reply->index == BUT__ALARM)
 				{
-
 					for (i = 0; i < channels; i++)
 					{
 						if (alarm_activated[i])
 						{
 							armed[i] = 0;
 							alarm_activated[i] = 0;
+							genieWriteObj(GENIE_OBJ_USER_LED, i, 0);
 						}
 					}
 				}
@@ -787,8 +797,21 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 					{
 						armed[i] = 0;
 						alarm_activated[i] = 0;
+						genieWriteObj(GENIE_OBJ_USER_LED, i, 0);
 					}
 				}
+				genieWriteObj(GENIE_OBJ_FORM, previous_form, 0);
+				// updateForm(previous_form);
+				temp_form = current_form;
+				current_form = previous_form;
+				previous_form = temp_form;
+				printf("%d, %d, %d\n", pre_previous_form, previous_form, current_form);
+				
+				updateGraphFormula();
+				updateRange();
+				updateAlarm();
+				updateNumpadDisplay();
+				updateAutoScreen();
 			}
 		break;
 	}
@@ -805,8 +828,10 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 
 void updateForm(int form)
 {
+	pre_previous_form = previous_form;
 	previous_form = current_form;
 	current_form = form;
+	printf("%d, %d, %d\n", pre_previous_form, previous_form, current_form);
 }
 
 /*
