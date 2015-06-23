@@ -56,9 +56,12 @@
 
 int current_form, previous_form;
 int errorCondition;
-int slider_values[channels];
 int current_slider = -1;
 int last_edit_button;
+
+int slider_values[channels];
+int rocker_values[channels];
+int armed[channels];ss
 
 double true_voltage[channels];
 double modified_voltage[channels];
@@ -70,6 +73,8 @@ double ref_volt_1[channels] = {0};
 double ref_volt_2[channels] = { [0 ... (channels - 1)] = 12};
 double true_volt_1[channels];
 double true_volt_2[channels];
+double alarm_max[channels];
+double alarm_min[channels];
 
 const double max_volt = 2.048;
 const double min_volt = -2.048;
@@ -87,22 +92,34 @@ enum op_form
 	CALIBRATE,
 	NUMPAD,
 	CONFIRMATION,
-	AUTO
+	AUTO,
+  INFO,
+  SETUP_ALARM,
+  ALARM
 };
 
 enum op_channel
 {
-	CH_1 = 9,
-	CH_2 = 8,
-	CH_3 = 10,
-	CH_4 = 7,
-	CH_5 = 6,
-	CH_6 = 2,
-	CH_7 = 1,
-	CH_8 = 0
+  CH_1 = 9,
+  CH_2 = 8,
+  CH_3 = 10,
+  CH_4 = 7,
+  CH_5 = 6,
+  CH_6 = 2,
+  CH_7 = 1,
+  CH_8 = 0,
+  ROCKER_CH_1 = 15,
+  ROCKER_CH_2 = 13,
+  ROCKER_CH_3 = 14,
+  ROCKER_CH_4 = 16,
+  ROCKER_CH_5 = 17,
+  ROCKER_CH_6 = 18,
+  ROCKER_CH_7 = 19,
+  ROCKER_CH_8 = 20
 };
 
-int slider[channels] = {CH_1, CH_2, CH_3, CH_4 , CH_5 , CH_6 , CH_7 , CH_8};
+int slider[channels] = {CH_1, CH_2, CH_3, CH_4, CH_5, CH_6, CH_7, CH_8};
+int rocker[channels] = {ROCKER_CH_1, ROCKER_CH_2, ROCKER_CH_3, ROCKER_CH_4, ROCKER_CH_5, ROCKER_CH_6, ROCKER_CH_7, ROCKER_CH_8};
 
 enum win_button
 {
@@ -116,7 +133,12 @@ enum win_button
 	BUT_CH_2 = 12,
 	BUT_SAVE_2 = 13,
 	BUT_MAX = 18,
-	BUT_MIN = 17
+	BUT_MIN = 17,
+  BUT_ALARM_BACK = 20,
+  BUT_ALARM_MAX = 21,
+  BUT_ALARM_MIN = 22,
+  BUT_ALARM_DISARM = 23,
+  BUT_ALARM_ARM = 24
 };
 
 enum button_4D
@@ -418,6 +440,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 {
   int i = 0;
   int slider_exists = FALSE;
+  int rocker_exists = FALSE;
 
   if (reply->cmd != GENIE_REPORT_EVENT)
   {
@@ -632,8 +655,54 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   				updateNumpadDisplay();
   			}
   		}
-
   	break;
+
+    case SETUP_ALARM:
+      puts("SETUP_ALARM");
+      if (reply->object == GENIE_OBJ_WINBUTTON)
+      {
+        switch(reply->index)
+        {
+          case BUT_ALARM_ARM:
+          break;
+
+          case BUT_ALARM_DISARM:
+          break
+
+          case BUT_ALARM_MIN:
+          break;
+
+          case BUT_ALARM_MAX:
+          break;
+
+          case BUT_ALARM_BACK:
+          break;
+        }
+      }
+      else if (reply->object == GENIE_OBJ_4DBUTTON)
+      {
+        for (i = 0; i < channels; i++)
+        {
+          if (reply->index == rocker[i])
+          {
+            rocker_exists = TRUE;
+            break;
+          }
+        }
+
+        if (rocker_exists)
+        {
+          if (reply->data == 1)
+          {
+            rocker_values[current_rocker] = 1;
+          }
+          else
+          {
+            rocker_values[current_rocker] = 0;  
+          }
+        }
+      }
+    break;
   }
   
   /*
@@ -649,7 +718,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 void updateForm(int form)
 {
   	previous_form = current_form;
- 	current_form = form;
+   	current_form = form;
 }
 
 /*
