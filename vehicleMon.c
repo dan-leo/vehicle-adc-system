@@ -58,10 +58,11 @@ int current_form, previous_form;
 int errorCondition;
 int current_slider = -1;
 int last_edit_button;
+int alarm_activated = 0;
 
 int slider_values[channels];
 int rocker_values[channels];
-int armed[channels];ss
+int armed[channels];
 
 double true_voltage[channels];
 double modified_voltage[channels];
@@ -180,7 +181,7 @@ void updateRange(void);
 int main(int argc, char **argv) {
 	int i, j, channel;
 	pthread_t myThread;
-	struct genieReplyStruct reply ;
+	struct genieReplyStruct reply;
 
 
 	setup();
@@ -201,10 +202,10 @@ int main(int argc, char **argv) {
 	{
 		while (genieReplyAvail ())
     	{
-	    	genieGetReply    (&reply) ;
-      		handleGenieEvent (&reply) ;
+	    	genieGetReply    (&reply);
+      	handleGenieEvent (&reply);
     	}
-    	usleep (10000) ; // 10mS - Don't hog the CPU in-case anything else is happening...
+    	usleep (10000); // 10mS - Don't hog the CPU in-case anything else is happening...
 	}
 	return 0;
 }
@@ -220,12 +221,12 @@ int setup(void)
 	// Using the Raspberry Pi's on-board serial port.
 	if (genieSetup ("/dev/ttyAMA0", 115200) < 0)
 	{
-		fprintf (stderr, "rgb: Can't initialise Genie Display: %s\n", strerror (errno)) ;
-		return 1 ;
+		fprintf (stderr, "rgb: Can't initialise Genie Display: %s\n", strerror (errno));
+		return 1;
 	}
 
 	// Select form 0, Home
-	genieWriteObj (GENIE_OBJ_FORM, 0, 0) ;
+	genieWriteObj (GENIE_OBJ_FORM, 0, 0);
 
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_1, 0);
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_2, 0);
@@ -236,20 +237,13 @@ int setup(void)
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_7, 0);
 	genieWriteObj (GENIE_OBJ_4DBUTTON, CH_8, 0);
 
-  genieWriteStr(23, "1\n2\n3\n4\n5\n6\n7\n8");
-
-//   genieWriteStr(23, "Channel:             Min:                                                    Max:\r\n"
-// "1                       -5.0000 V                                          5.0000 V\r\n"
-// "2                       -5.0000 V                                          5.0000 V\n"
-// "3                       -5.0000 V                                          5.0000 V\n"
-// "4                       -5.0000 V                                          5.0000 V\n"
-// "5                       -5.0000 V                                          5.0000 V\n"
-// "6                       -5.0000 V                                          5.0000 V\n"
-// "7                       -5.0000 V                                          5.0000 V\n"
-// "8                       -5.0000 V                                          5.0000 V\n"
-// );
-
 	// init
+
+  for(i = 0; i < channels; i++)
+  {
+    alarm_max[i] = 5;
+    alarm_min[i] = -5;
+  }
 
 	fp = fopen(data_file, "r+");
 
@@ -395,19 +389,19 @@ int setup(void)
 static void *adc_read_loop (void *data)
 {
   int j;
-  struct sched_param sched ;
-  int pri = 10 ;
+  struct sched_param sched;
+  int pri = 10;
 
   // Set to a real-time priority
   //  (only works if root, ignored otherwise)
 
-  memset (&sched, 0, sizeof(sched)) ;
+  memset (&sched, 0, sizeof(sched));
 
   if (pri > sched_get_priority_max (SCHED_RR))
-    pri = sched_get_priority_max (SCHED_RR) ;
+    pri = sched_get_priority_max (SCHED_RR);
 
-  sched.sched_priority = pri ;
-  sched_setscheduler (0, SCHED_RR, &sched) ;
+  sched.sched_priority = pri;
+  sched_setscheduler (0, SCHED_RR, &sched);
 
   // sleep(1);
 
@@ -417,8 +411,28 @@ static void *adc_read_loop (void *data)
 		{
 			true_voltage[j] = getadc(j + 1);
 			modified_voltage[j] = gradient[j] * true_voltage[j] + offset[j];
-
 			// printf ("Channel: %d  = %2.4fV\n", j + 1, modified_voltage[j]);
+
+      if (alarm_max[j] > alarm_min[j])
+      {
+        if (modified_voltage[j] > alarm_max[j] || modified_voltage[j] < alarm_min[j])
+        {
+          if (armed[j])
+          {
+            alarm_activated = 1;
+          }
+        }
+      }
+      else
+      {
+        if (modified_voltage[j] < alarm_max[j] || modified_voltage[j] > alarm_min[j])
+        {
+          if (armed[j])
+          {
+            alarm_activated = 1;
+          } 
+        } 
+      }
 			
 			updateDisplay(modified_voltage[j], j);
       // genieWriteObj(GENIE_OBJ_SOUND, 0, 0);
@@ -427,7 +441,7 @@ static void *adc_read_loop (void *data)
 		// printf("\n");
   }
 
-  return (void *)NULL ;
+  return (void *)NULL;
 }
 
 /*
@@ -444,8 +458,8 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 
   if (reply->cmd != GENIE_REPORT_EVENT)
   {
-    printf ("Invalid event from the display: 0x%02X\r\n", reply->cmd) ;
-    return ;
+    printf ("Invalid event from the display: 0x%02X\r\n", reply->cmd);
+    return;
   }
 
   if (reply->object == GENIE_OBJ_FORM)
@@ -473,30 +487,30 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   			switch (reply->index)
   			{
   				case BUT_GRAD:
-  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0);
   					updateForm(NUMPAD);
   					last_edit_button = BUT_GRAD;
   				break;
   				case BUT_OFFS:
-  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0);
   					updateForm(NUMPAD);
   					last_edit_button = BUT_OFFS;
   				break;
 /*  				case BUT_AUTO:
-  					genieWriteObj (GENIE_OBJ_FORM, AUTO, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, AUTO, 0);
   					updateForm(AUTO);
   				break;
   				case BUT_RESET:
-  					genieWriteObj (GENIE_OBJ_FORM, CONFIRMATION, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, CONFIRMATION, 0);
   					updateForm(CONFIRMATION);
   				break;*/
   				case BUT_MAX:
-  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0);
   					updateForm(NUMPAD);
   					last_edit_button = BUT_MAX;
   				break;
   				case BUT_MIN:
-  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0);
   					updateForm(NUMPAD);
   					last_edit_button = BUT_MIN;
   				break;
@@ -507,7 +521,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   			switch(reply->index)
   			{
   				case BUT_4D_RESET:
-  					genieWriteObj (GENIE_OBJ_FORM, CONFIRMATION, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, CONFIRMATION, 0);
   					updateForm(CONFIRMATION);
   				break;
   			}
@@ -577,9 +591,9 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   		else if (reply->object == GENIE_OBJ_KEYBOARD)
   		{
   			if (reply->index == 0)  // Only one keyboard
-      			processKey(reply->data) ;
+      			processKey(reply->data);
     		else
-      			printf ("Unknown keyboard: %d\n", reply->index) ;
+      			printf ("Unknown keyboard: %d\n", reply->index);
   		}
   	break;
 
@@ -593,12 +607,12 @@ void handleGenieEvent (struct genieReplyStruct *reply)
   			switch (reply->index)
   			{
   				case BUT_CH_1:
-  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0);
   					updateForm(NUMPAD);
   					last_edit_button = BUT_CH_1;
   				break;
   				case BUT_CH_2:
-  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0) ;
+  					genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0);
   					updateForm(NUMPAD);
   					last_edit_button = BUT_CH_2;
   				break;
@@ -664,18 +678,40 @@ void handleGenieEvent (struct genieReplyStruct *reply)
         switch(reply->index)
         {
           case BUT_ALARM_ARM:
+            for (i = 0; i < channels; i++)
+            {
+              if (rocker_values[i])
+              {
+                armed[i] = 1;
+              }
+            }
           break;
 
           case BUT_ALARM_DISARM:
-          break
+            for (i = 0; i < channels; i++)
+            {
+              if (rocker_values[i])
+              {
+                armed[i] = 0;
+              }
+            }
+          break;
 
           case BUT_ALARM_MIN:
+            genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0);
+            updateForm(NUMPAD);
+            last_edit_button = BUT_ALARM_MIN;
           break;
 
           case BUT_ALARM_MAX:
+            genieWriteObj (GENIE_OBJ_FORM, NUMPAD, 0);
+            updateForm(NUMPAD);
+            last_edit_button = BUT_ALARM_MIN;
           break;
 
           case BUT_ALARM_BACK:
+            genieWriteObj (GENIE_OBJ_FORM, HOME, 0);
+            updateForm(HOME);
           break;
         }
       }
@@ -685,29 +721,30 @@ void handleGenieEvent (struct genieReplyStruct *reply)
         {
           if (reply->index == rocker[i])
           {
-            rocker_exists = TRUE;
+            // rocker_exists = TRUE;
+            rocker_values[reply->index] = reply->data;
             break;
           }
         }
 
-        if (rocker_exists)
+        /*if (rocker_exists)
         {
           if (reply->data == 1)
           {
-            rocker_values[current_rocker] = 1;
+            rocker_values[reply->index] = 1;
           }
           else
           {
-            rocker_values[current_rocker] = 0;  
+            rocker_values[reply->index] = 0;
           }
-        }
+        }*/
       }
     break;
   }
   
   /*
     else
-      printf ("Unknown button: %d\n", reply->index) ;
+      printf ("Unknown button: %d\n", reply->index);
   }
   else
     printf ("Unhandled Event: object: %2d, index: %d data: %d [%02X %02X %04X]\r\n",
@@ -741,8 +778,8 @@ void processKey (int key)
     sprintf(numberString, "%s%c", numberString, key);
     printf("numberString: %s\n", numberString);
     
-    updateNumpadDisplay () ;
-    return ;
+    updateNumpadDisplay ();
+    return;
   }
 
   switch (key)
@@ -751,7 +788,7 @@ void processKey (int key)
   case 'c':     // Clear entry
   	  memset(numberString, 0, display_length);
   	  minus = FALSE;
-    break ;
+    break;
 
   // Other functions
 
@@ -769,13 +806,13 @@ void processKey (int key)
     	strcpy(numberString, numberString + 1);
     	minus = FALSE;
     }
-    break ;
+    break;
 
   // Operators
 
   case KB_DOT:
   	sprintf(numberString, "%s%c", numberString, '.');
-    break ;
+    break;
 
   case KB_BACKSPACE:
     
@@ -784,7 +821,7 @@ void processKey (int key)
   	{
   		minus = FALSE;
   	}
-    // updateNumpadDisplay () ;
+    // updateNumpadDisplay ();
   	break;
 
   case KB_SAVE:
@@ -844,14 +881,32 @@ void processKey (int key)
     			}
     		break;
     		case BUT_CH_2:
-    			for (i = 0; i < channels; i++)
-    			{
-    				if (slider_values[i])
-    				{
-    					ref_volt_2[i] = numberDouble;
-    				}
-    			}
-    		break;
+          for (i = 0; i < channels; i++)
+          {
+            if (slider_values[i])
+            {
+              ref_volt_2[i] = numberDouble;
+            }
+          }
+        break;
+        case BUT_ALARM_MIN:
+          for (i = 0; i < channels; i++)
+          {
+            if (rocker_values[i])
+            {
+              alarm_min[i] = numberDouble;
+            }
+          }
+        break;
+        case BUT_ALARM_MAX:
+          for (i = 0; i < channels; i++)
+          {
+            if (rocker_values[i])
+            {
+              alarm_max[i] = numberDouble;
+            }
+          }
+        break;
     	}
     	save_to_file();
 
@@ -864,11 +919,11 @@ void processKey (int key)
   	break;
 
   default:
-    printf ("*** Unknown key from display: 0x%02X, %d\n", key, key) ;
-    break ;
+    printf ("*** Unknown key from display: 0x%02X, %d\n", key, key);
+    break;
   }
 
-  updateNumpadDisplay () ;
+  updateNumpadDisplay ();
   printf("numberString: %s\n", numberString);
 }
 
@@ -915,18 +970,18 @@ void updateDisplay (double val, int index)
 
 void updateNumpadDisplay (void)
 {
-  char buf [32] ;
+  char buf [32];
 
   if (errorCondition)
-    sprintf (buf, "%s", "ERROR") ;
+    sprintf (buf, "%s", "ERROR");
   else
   {
-    // sprintf (buf, "%13.13g", display) ;
+    // sprintf (buf, "%13.13g", display);
     strcpy(buf, numberString);
-    // printf ("%s\n", buf) ;
+    // printf ("%s\n", buf);
   }
 
-  genieWriteStr (17, buf) ;  // Text box number 17
+  genieWriteStr (17, buf);  // Text box number 17
 }
 
 /*
@@ -937,10 +992,10 @@ void updateNumpadDisplay (void)
 
 void updateGraphFormula (void)
 {
-  char buf [32] ;
+  char buf [32];
 
   if (errorCondition)
-    sprintf (buf, "%s", "ERROR") ;
+    sprintf (buf, "%s", "ERROR");
   else
   {
     if (current_slider == -1)
@@ -950,11 +1005,11 @@ void updateGraphFormula (void)
     else
     {
       sprintf (buf, "y = %6.4lfx + %5.3lf", gradient[current_slider], offset[current_slider]);
-      // printf ("%s\n", buf) ;
+      // printf ("%s\n", buf);
     }
   }
 
-  genieWriteStr (16, buf) ;  // Text box number 16
+  genieWriteStr (16, buf);  // Text box number 16
 }
 
 /*
@@ -965,10 +1020,10 @@ void updateGraphFormula (void)
 
 void updateRange (void)
 {
-  char buf [40] ;
+  char buf [40];
 
   if (errorCondition)
-    sprintf (buf, "%s", "ERROR") ;
+    sprintf (buf, "%s", "ERROR");
   else
   {
     if (current_slider == -1)
@@ -978,11 +1033,11 @@ void updateRange (void)
     else
     {
       sprintf (buf, "[%lf,\n %lf] V", min[current_slider], max[current_slider]);
-      // printf ("%s\n", buf) ;
+      // printf ("%s\n", buf);
     }
   }
 
-  genieWriteStr (21, buf) ;  // Text box number 16
+  genieWriteStr (21, buf);  // Text box number 16
 }
 
 
@@ -994,13 +1049,13 @@ void updateRange (void)
 
 void updateAutoScreen (void)
 {
-  char buf_1 [32] ;
-  char buf_2 [32] ;
+  char buf_1 [32];
+  char buf_2 [32];
 
   if (errorCondition)
   {
-    sprintf (buf_1, "%s", "ERROR") ;
-	sprintf (buf_2, "%s", "ERROR") ;
+    sprintf (buf_1, "%s", "ERROR");
+	sprintf (buf_2, "%s", "ERROR");
   }
   else
   {
@@ -1013,12 +1068,12 @@ void updateAutoScreen (void)
   	{
     	sprintf (buf_1, "%lf V", ref_volt_1[current_slider]);
     	sprintf (buf_2, "%lf V", ref_volt_2[current_slider]);
-    	// printf ("%s\n", buf) ;
+    	// printf ("%s\n", buf);
     }
   }
 
-  genieWriteStr (19, buf_1) ;  // Text box number 19
-  genieWriteStr (20, buf_2) ;  // Text box number 20
+  genieWriteStr (19, buf_1);  // Text box number 19
+  genieWriteStr (20, buf_2);  // Text box number 20
 }
 
 /*
