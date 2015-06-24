@@ -425,6 +425,27 @@ int setup(void)
 		}
 	}
 
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		armed[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels - 1)
+		{
+			i++;
+		}
+		else
+		{
+			break;
+		}
+	}
+
 
 	fclose(fp);
 	return 0;
@@ -558,9 +579,11 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 	if (reply->object == GENIE_OBJ_FORM)
 	{
 		updateForm(reply->index);
+		if (reply->index == SETUP_ALARM)
+		{
+			updateAlarm();
+		}
 	}
-
-
 
 	switch (current_form)
 	{
@@ -1390,6 +1413,13 @@ void save_to_file(void)
 	for (i = 0; i < channels; i++)
 	{
 		fprintf(fp, "%lf,", alarm_min[i]);
+	}
+
+	fprintf(fp, "\narmed:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", armed[i]);
 	}
 
 	fclose(fp);
