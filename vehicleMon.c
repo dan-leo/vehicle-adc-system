@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
 	// start adc read thread
 	(void)pthread_create (&myThread, NULL, adc_read_loop, NULL);
 
-	// loop and print to terminal
+	// touchscreen event loop
 	for (;;)
 	{
 		while (genieReplyAvail ())
@@ -397,6 +397,7 @@ static void *adc_read_loop (void *data)
 	int j;
 	struct sched_param sched;
 	int pri = 10;
+	int temp_form;
 
 	// Set to a real-time priority
 	//  (only works if root, ignored otherwise)
@@ -410,11 +411,11 @@ static void *adc_read_loop (void *data)
 	sched_setscheduler (0, SCHED_RR, &sched);
 
 	// sleep(1);
-
 	for (;;)
 	{
 		for (j = 0; j < 8; j++)
 		{
+			// here we obtain the true voltage from the adc and convert it to
 			true_voltage[j] = getadc(j + 1);
 			modified_voltage[j] = gradient[j] * true_voltage[j] + offset[j];
 			// printf ("Channel: %d  = %2.4fV\n", j + 1, modified_voltage[j]);
@@ -433,6 +434,20 @@ static void *adc_read_loop (void *data)
 						}
 					}
 				}
+				else
+				{
+					if (alarm_activated[j])
+					{
+						alarm_activated[j] = 0;
+						if (current_form == ALARM)
+						{
+							genieWriteObj(GENIE_OBJ_FORM, previous_form, 0);
+							temp_form = current_form;
+							current_form = previous_form;
+							previous_form = temp_form;
+						}
+					}
+				}
 			}
 			else
 			{
@@ -448,6 +463,20 @@ static void *adc_read_loop (void *data)
 						}
 					} 
 				} 
+				else
+				{
+					if (alarm_activated[j])
+					{
+						alarm_activated[j] = 0;
+						if (current_form == ALARM)
+						{
+							genieWriteObj(GENIE_OBJ_FORM, previous_form, 0);
+							temp_form = current_form;
+							current_form = previous_form;
+							previous_form = temp_form;
+						}
+					}
+				}
 			}
 
 			updateDisplay(modified_voltage[j], j);
@@ -805,7 +834,7 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 				temp_form = current_form;
 				current_form = previous_form;
 				previous_form = temp_form;
-				printf("%d, %d, %d\n", pre_previous_form, previous_form, current_form);
+				// printf("%d, %d, %d\n", pre_previous_form, previous_form, current_form);
 				
 				updateGraphFormula();
 				updateRange();
@@ -831,7 +860,7 @@ void updateForm(int form)
 	pre_previous_form = previous_form;
 	previous_form = current_form;
 	current_form = form;
-	printf("%d, %d, %d\n", pre_previous_form, previous_form, current_form);
+	// printf("%d, %d, %d\n", pre_previous_form, previous_form, current_form);
 }
 
 /*
@@ -852,7 +881,7 @@ void processKey (int key)
 	if (isdigit (key))
 	{
 		sprintf(numberString, "%s%c", numberString, key);
-		printf("numberString: %s\n", numberString);
+		// printf("numberString: %s\n", numberString);
 
 		updateNumpadDisplay ();
 		return;
@@ -999,7 +1028,7 @@ void processKey (int key)
 	}
 
 	updateNumpadDisplay ();
-	printf("numberString: %s\n", numberString);
+	// printf("numberString: %s\n", numberString);
 }
 
 
