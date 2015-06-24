@@ -228,6 +228,9 @@ int setup(void)
 		return 1;
 	}
 
+	// volume
+	genieWriteObj(GENIE_OBJ_SOUND, 1, 1);
+
 	// Select form 0, Home
 	genieWriteObj (GENIE_OBJ_FORM, 0, 0);
 
@@ -427,6 +430,7 @@ static void *adc_read_loop (void *data)
 					if (armed[j])
 					{
 						alarm_activated[j] = 1;
+						genieWriteObj(GENIE_OBJ_SOUND, 0, j + 2);
 						if (current_form != ALARM)
 						{
 							genieWriteObj(GENIE_OBJ_FORM, ALARM, 0);
@@ -455,6 +459,8 @@ static void *adc_read_loop (void *data)
 				{
 					if (armed[j])
 					{
+
+						genieWriteObj(GENIE_OBJ_SOUND, 0, j + 2);
 						alarm_activated[j] = 1;
 						if (current_form != ALARM)
 						{
@@ -480,7 +486,7 @@ static void *adc_read_loop (void *data)
 			}
 
 			updateDisplay(modified_voltage[j], j);
-			// genieWriteObj(GENIE_OBJ_SOUND, 0, 0);
+			
 			// genieWriteObj(GENIE_OBJ_SCOPE, j < 4 ? 0 : 1, (int)(true_voltage[j]*25 + 50));
 		}
 		// printf("\n");
