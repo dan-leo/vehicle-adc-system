@@ -1119,7 +1119,7 @@ void updateDisplay (double val, int index)
 	graph_offset = 100 - graph_gradient * max[index];
 	output = graph_gradient * val + graph_offset;
 
-	sprintf(buf, "%.10lf", val);
+	sprintf(buf, "%.10lf V", val);
 	genieWriteStr(index, buf);
 
 	genieWriteObj(GENIE_OBJ_SCOPE, index < 4 ? 0 : 1, (int)(output));
