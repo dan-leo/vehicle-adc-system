@@ -135,7 +135,7 @@ enum win_button
 	BUT_SAVE_2 = 13,
 	BUT_MAX = 18,
 	BUT_MIN = 17,
-	BUT_ALARM_BACK = 20,
+	BUT_ALARM_RESET = 20,
 	BUT_ALARM_MAX = 21,
 	BUT_ALARM_MIN = 22,
 	BUT_ALARM_DISARM = 23,
@@ -171,6 +171,7 @@ void updateAlarm (void);
 void processKey (int key);
 int isNumeric(char *str);
 void reset(void);
+void reset_alarm_min_max(void);
 void save_to_file(void);
 void updateRange(void);
 
@@ -247,8 +248,6 @@ int setup(void)
 
 	for(i = 0; i < channels; i++)
 	{
-		alarm_max[i] = 5;
-		alarm_min[i] = -5;
 		alarm_activated[i] = 0;
 		genieWriteObj(GENIE_OBJ_USER_LED, i, 0);
 		genieWriteObj(GENIE_OBJ_4DBUTTON, rocker[i], 0);
@@ -373,6 +372,48 @@ int setup(void)
 	while (token)
 	{
 		ref_volt_2[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels - 1)
+		{
+			i++;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		alarm_max[i] = atof(token);
+		token = strtok(NULL, t);
+		if (i < channels - 1)
+		{
+			i++;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+	token = strtok(line, t);
+	i = 0;
+	while (token)
+	{
+		alarm_min[i] = atof(token);
 		token = strtok(NULL, t);
 		if (i < channels - 1)
 		{
@@ -779,9 +820,8 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 				last_edit_button = BUT_ALARM_MAX;
 				break;
 
-			case BUT_ALARM_BACK:
-				genieWriteObj (GENIE_OBJ_FORM, HOME, 0);
-				updateForm(HOME);
+			case BUT_ALARM_RESET:
+				reset_alarm_min_max();
 				break;
 			}
 		}
@@ -1277,6 +1317,19 @@ void reset(void)
 	save_to_file();
 }
 
+void reset_alarm_min_max(void)
+{
+	int i;
+
+	for (i = 0; i < 8; i++)
+	{
+		alarm_max[i] = 5;
+		alarm_min[i] = -5;
+	}
+
+	save_to_file();
+}
+
 void save_to_file(void)
 {
 	int i;
@@ -1323,6 +1376,20 @@ void save_to_file(void)
 	for (i = 0; i < channels; i++)
 	{
 		fprintf(fp, "%lf,", ref_volt_2[i]);
+	}
+
+	fprintf(fp, "\nalarm_max:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", alarm_max[i]);
+	}
+
+	fprintf(fp, "\nalarm_min:\n");
+
+	for (i = 0; i < channels; i++)
+	{
+		fprintf(fp, "%lf,", alarm_min[i]);
 	}
 
 	fclose(fp);
