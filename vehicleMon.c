@@ -95,7 +95,7 @@ enum op_form
 	NUMPAD,
 	CONFIRMATION,
 	AUTO,
-	INFO,
+	SETTINGS,
 	SETUP_ALARM,
 	ALARM
 };
@@ -142,7 +142,9 @@ enum win_button
 	BUT_ALARM_DISARM = 23,
 	BUT_ALARM_ARM = 24,
 	BUT__ALARM = 25,
-	BUT__ALARM_DISARM_ALL = 27
+	BUT__ALARM_DISARM_ALL = 27,
+	BUT_REBOOT = 30,
+	BUT_SHUTDOWN = 31
 };
 
 enum button_4D
@@ -942,6 +944,22 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 				updateAutoScreen();
 			}
 		break;
+
+		case SETTINGS:
+		    if (reply->object == GENIE_OBJ_WINBUTTON)
+		    {
+		    	if (reply->index == BUT_REBOOT)
+		    	{
+		    	    puts("System going down for reboot now!");
+		    	    system("sudo reboot");
+		    	}
+		    	if (reply->index == BUT_SHUTDOWN)
+		    	{
+		    	    puts("System going down for shutdown now!");
+		    	    system("sudo halt");
+		    	}
+		    }
+	    break;
 	}
 
 	/*
