@@ -58,6 +58,7 @@ int current_form, previous_form, pre_previous_form;
 int errorCondition;
 int current_slider = -1;
 int last_edit_button;
+int volume = 10;
 
 int slider_values[channels];
 int rocker_values[channels];
@@ -204,7 +205,7 @@ int main(int argc, char **argv) {
 	// touchscreen event loop
 	for (;;)
 	{
-		while (genieReplyAvail ())
+		while (genieReplyAvail())
 		{
 			genieGetReply    (&reply);
 			handleGenieEvent (&reply);
@@ -230,7 +231,7 @@ int setup(void)
 	}
 
 	// volume
-	genieWriteObj(GENIE_OBJ_SOUND, 1, 1);
+	genieWriteObj(GENIE_OBJ_SOUND, 1, volume);
 
 	// Select form 0, Home
 	genieWriteObj (GENIE_OBJ_FORM, 0, 0);
@@ -447,6 +448,17 @@ int setup(void)
 	}
 
 
+	line = malloc(line_length * sizeof(char));
+
+	fgets(line, line_length, fp);
+	fgets(line, line_length, fp);
+
+    volume = atoi(line);
+    printf("volume: %d\n", volume);
+
+    // volume
+	genieWriteObj(GENIE_OBJ_SOUND, 1, volume);
+
 	fclose(fp);
 	return 0;
 }
@@ -492,7 +504,8 @@ static void *adc_read_loop (void *data)
 					if (armed[j])
 					{
 						alarm_activated[j] = 1;
-						genieWriteObj(GENIE_OBJ_SOUND, 0, j + 2);
+						// genieWriteObj(GENIE_OBJ_SOUND, 0, j + 2);
+						genieWriteObj(GENIE_OBJ_SOUND, 0, 8 - j);
 						if (current_form != ALARM)
 						{
 							genieWriteObj(GENIE_OBJ_FORM, ALARM, 0);
@@ -522,7 +535,7 @@ static void *adc_read_loop (void *data)
 					if (armed[j])
 					{
 
-						genieWriteObj(GENIE_OBJ_SOUND, 0, j + 2);
+						genieWriteObj(GENIE_OBJ_SOUND, 0, 8 - j);
 						alarm_activated[j] = 1;
 						if (current_form != ALARM)
 						{
@@ -570,10 +583,27 @@ void handleGenieEvent (struct genieReplyStruct *reply)
 	int rocker_exists = FALSE;
 	int temp_form;
 
+	static int save_volume = 0;
+
 	if (reply->cmd != GENIE_REPORT_EVENT)
 	{
 		printf ("Invalid event from the display: 0x%02X\r\n", reply->cmd);
 		return;
+	}
+	
+	if (reply->object == GENIE_OBJ_TRACKBAR && reply->index == 0)
+	{
+		volume = reply->data;
+		save_volume = 1;
+		return;
+	}
+
+    // workaround so that one doesn't save volume to flash every time that one changes it..
+	if (save_volume)
+	{
+		save_volume = 0;
+		printf("volume: %d\n", volume);
+		save_to_file();
 	}
 
 	if (reply->object == GENIE_OBJ_FORM)
@@ -1421,6 +1451,9 @@ void save_to_file(void)
 	{
 		fprintf(fp, "%lf,", armed[i]);
 	}
+
+	fprintf(fp, "\nvolume:\n");
+    fprintf(fp, "%d", volume);
 
 	fclose(fp);
 }
