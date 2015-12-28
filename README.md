@@ -17,6 +17,7 @@ This system requires a 4D systems touchscreen, raspberry pi, and https://www.abe
 * Dependencies
 
     geniePi
+    https://github.com/4dsystems/ViSi-Genie-RaspPi-Library
 
 * Database configuration
 * How to run tests
