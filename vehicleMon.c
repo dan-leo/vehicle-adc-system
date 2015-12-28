@@ -190,7 +190,6 @@ int main(int argc, char **argv) {
 	pthread_t myThread;
 	struct genieReplyStruct reply;
 
-
 	setup();
 
 	// setup multiplier based on input voltage range and divisor
@@ -256,10 +255,19 @@ int setup(void)
 		genieWriteObj(GENIE_OBJ_4DBUTTON, rocker[i], 0);
 	}
 
+	if( access( data_file, F_OK ) == -1 )
+	{
+	   reset();
+	   reset_alarm_min_max();
+	   save_to_file();
+	}
+
 	fp = fopen(data_file, "r+");
 
+	//
+	// gradient
+	//
 	line = calloc(line_length, sizeof(char));
-
 
 	fgets(line, line_length, fp);
 	fgets(line, line_length, fp);
@@ -281,6 +289,9 @@ int setup(void)
 		}
 	}
 
+   //
+   // offset
+   //
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
@@ -302,6 +313,9 @@ int setup(void)
 		}
 	}
 
+	//
+	// max
+	//
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
@@ -323,6 +337,9 @@ int setup(void)
 		}
 	}
 
+   //
+   //min
+   //
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
@@ -344,6 +361,9 @@ int setup(void)
 		}
 	}
 
+   //
+   // reference voltage 1
+   //
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
@@ -365,6 +385,9 @@ int setup(void)
 		}
 	}
 
+   //
+   // reference voltage 2
+   //
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
@@ -386,6 +409,9 @@ int setup(void)
 		}
 	}
 
+   //
+   // alarm goes off if this max is reached
+   //
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
@@ -407,6 +433,9 @@ int setup(void)
 		}
 	}
 
+   //
+   // alarm goes off if below this minimum
+   //
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
@@ -428,6 +457,9 @@ int setup(void)
 		}
 	}
 
+   //
+   // armed (true/false)
+   //
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
@@ -449,7 +481,9 @@ int setup(void)
 		}
 	}
 
-
+   //
+   // volume
+   //
 	line = malloc(line_length * sizeof(char));
 
 	fgets(line, line_length, fp);
