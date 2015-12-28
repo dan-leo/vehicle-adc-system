@@ -4,6 +4,8 @@ This README would normally document whatever steps are necessary to get your app
 
 ### What is this repository for? ###
 
+This system requires a 4D systems touchscreen, raspberry pi, and https://www.abelectronics.co.uk/p/14/Delta-Sigma-Pi. It can be fitted into a vehicle. It takes in adc values from 8 channels, with 18-bit resolution. Each channel should be voltage divided so as not to damage the system.
+
 * Quick summary
 * Version
 * [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
